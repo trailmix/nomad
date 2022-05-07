@@ -1,0 +1,76 @@
+name: "Build: and push to nexus and registry"
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  local:
+    name: build-${{ env.BUILD_ARCH }}-${{ env.BUILD_VERSION }}-golang:${{ env.GO_VERSION }}-alpine${{ env.ALPINE_VERSION }}
+    runs-on: [self-hosted, "${{ env.BUILD_ARCH }}"]
+    strategy:
+      matrix:
+        arch: [arm64, amd64]
+        versions:
+          - GO_VERSION: "1.17.9"
+            ALPINE_VERSION: "3.15"
+            NOMAD_VERSION: "1.3.0-rc.1"
+          - GO_VERSION: "1.17.7"
+            ALPINE_VERSION: "3.15"
+            NOMAD_VERSION: "1.3.0-beta.1"
+          - GO_VERSION: "1.17.5"
+            ALPINE_VERSION: "3.15"
+            NOMAD_VERSION: "1.2.6"
+          - GO_VERSION: "1.17.5"
+            ALPINE_VERSION: "3.15"
+            NOMAD_VERSION: "1.2.5"
+    env:
+      BUILD_ARCH: ${{ matrix.arch }}
+      BUILD_VERSION: ${{ matrix.versions.VERSION }}
+      BUILD_CHECKSUM: ${{ matrix.versions.CHECKSUM }}
+      GO_VERSION: ${{ matrix.versions.GO_VERSION }}
+      ALPINE_VERSION: ${{ matrix.versions.ALPINE_VERSION }}
+      NEXUS_URI: nexus.trilho.me
+      REGISTRY_URI: registry.trilho.me
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Set version
+        id: setup
+        run: |
+          VERSION=edge
+
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          fi
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            VERSION=nightly
+          fi
+          echo ::set-output name=version::${VERSION}
+
+          TAGS="--tag ${NEXUS_URI}/${GITHUB_REPOSITORY}:${VERSION} --tag ${REGISTRY_URI}/${GITHUB_REPOSITORY}:${VERSION}"
+          if [[ $VERSION =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+            TAGS="$TAGS --tag ${NEXUS_URI}/${GITHUB_REPOSITORY}:latest --tag ${REGISTRY_URI}/${GITHUB_REPOSITORY}:latest"
+          fi
+          echo ::set-output name=build_string::\
+            --platform ${BUILD_ARCH} \
+            --build-arg BUILD_VERSION=${BUILD_VERSION} \
+            --build-arg BUILD_CHECKSUM=${BUILD_CHECKSUM} \
+            --build-arg GO_VERSION=${GO_VERSION} \
+            --build-arg ALPINE_VERSION=${ALPINE_VERSION} \
+            --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+            --build-arg VCS_REF=${GITHUB_SHA::8} \
+            ${TAGS} --file ./Dockerfile ./
+      - name: Docker Build
+        run: docker build ${{ steps.setup.output.build_string build_string }}
+      - name: Docker Push - registry
+        if: success() && github.event_name != 'pull_request'
+        run: docker push -a ${REGISTRY_URI}/${GITHUB_REPOSITORY}
+      - name: Docker Login and Push - nexus
+        if: success() && github.event_name != 'pull_request'
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_NEXUS_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_NEXUS_TOKEN }}
+        run: |
+          echo "${DOCKER_PASSWORD}" | docker login ${NEXUS_URI} --username "${DOCKER_USERNAME}" --password-stdin
+          docker push -a ${NEXUS_URI}/${GITHUB_REPOSITORY}
