@@ -32,7 +32,6 @@ jobs:
           fi
           echo ::set-output name=build_string::\
             --platform ${BUILD_ARCH} \
-            --build-arg BUILD_CHECKSUM=${BUILD_CHECKSUM} \
             --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
             --build-arg VCS_REF=${GITHUB_SHA::8} \
             ${TAGS} --file ./Dockerfile ./
@@ -47,7 +46,7 @@ jobs:
         with:
           install: true
       - name: Docker Build
-        run: docker build ${{ steps.setup.output.build_string build_string }}
+        run: docker build ${{ steps.setup.output.build_string }}
       - name: Docker Login and Push - Docker Prime
         if: success() && github.event_name != 'pull_request'
         env:

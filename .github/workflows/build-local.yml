@@ -6,8 +6,8 @@ on:
 
 jobs:
   local:
-    name: build-${{ env.BUILD_ARCH }}-${{ env.BUILD_VERSION }}-golang:${{ env.GO_VERSION }}-alpine${{ env.ALPINE_VERSION }}
-    runs-on: [self-hosted, "${{ env.BUILD_ARCH }}"]
+    name: build-${{ matrix.arch }}-${{ matrix.versions.NOMAD_VERSION }}-golang:${{ matrix.versions.GO_VERSION }}-alpine${{ matrix.versions.NOMAD_VERSION }}
+    runs-on: [self-hosted, "${{ matrix.arch }}"]
     strategy:
       matrix:
         arch: [arm64, amd64]
@@ -27,7 +27,6 @@ jobs:
     env:
       BUILD_ARCH: ${{ matrix.arch }}
       BUILD_VERSION: ${{ matrix.versions.VERSION }}
-      BUILD_CHECKSUM: ${{ matrix.versions.CHECKSUM }}
       GO_VERSION: ${{ matrix.versions.GO_VERSION }}
       ALPINE_VERSION: ${{ matrix.versions.ALPINE_VERSION }}
       NEXUS_URI: nexus.trilho.me
@@ -55,14 +54,13 @@ jobs:
           echo ::set-output name=build_string::\
             --platform ${BUILD_ARCH} \
             --build-arg BUILD_VERSION=${BUILD_VERSION} \
-            --build-arg BUILD_CHECKSUM=${BUILD_CHECKSUM} \
             --build-arg GO_VERSION=${GO_VERSION} \
             --build-arg ALPINE_VERSION=${ALPINE_VERSION} \
             --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
             --build-arg VCS_REF=${GITHUB_SHA::8} \
             ${TAGS} --file ./Dockerfile ./
       - name: Docker Build
-        run: docker build ${{ steps.setup.output.build_string build_string }}
+        run: docker build ${{ steps.setup.output.build_string }}
       - name: Docker Push - registry
         if: success() && github.event_name != 'pull_request'
         run: docker push -a ${REGISTRY_URI}/${GITHUB_REPOSITORY}
