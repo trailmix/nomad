@@ -60,7 +60,7 @@ jobs:
             --build-arg VCS_REF=${GITHUB_SHA::8} \
             ${TAGS} --file ./Dockerfile ./
       - name: Docker Build
-        run: docker build ${{ steps.setup.output.build_string }}
+        run: docker build ${{ steps.setup.outputs.build_string }}
       - name: Docker Push - registry
         if: success() && github.event_name != 'pull_request'
         run: docker push -a ${REGISTRY_URI}/${GITHUB_REPOSITORY}
