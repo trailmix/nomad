@@ -15,6 +15,7 @@ jobs:
           - GO_VERSION: "1.17.9"
             ALPINE_VERSION: "3.15"
             NOMAD_VERSION: "1.3.0-rc.1"
+            LATEST: true
           - GO_VERSION: "1.17.7"
             ALPINE_VERSION: "3.15"
             NOMAD_VERSION: "1.3.0-beta.1"
@@ -34,50 +35,43 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-      # - name: Set up QEMU
-      #   id: qemu
-      #   uses: docker/setup-qemu-action@v1
-      #   with:
-      #     image: tonistiigi/binfmt:latest
-      #     platforms: ${{ env.BUILD_ARCH }}
-      - uses: docker/setup-buildx-action@v1
-        id: buildx
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
         with:
-          install: true
-      - name: Set version
-        id: setup
-        run: |
-          VERSION=edge
-
-          if [[ $GITHUB_REF == refs/tags/* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/}
-          fi
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            VERSION=nightly
-          fi
-          echo ::set-output name=version::${VERSION}
-
-          TAGS="--tag ${NEXUS_URI}/${GITHUB_REPOSITORY}:${VERSION} --tag ${REGISTRY_URI}/${GITHUB_REPOSITORY}:${VERSION}"
-          if [[ $VERSION =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-            TAGS="$TAGS --tag ${NEXUS_URI}/${GITHUB_REPOSITORY}:latest --tag ${REGISTRY_URI}/${GITHUB_REPOSITORY}:latest"
-          fi
-          echo ::set-output name=build_string::--platform ${BUILD_ARCH} \
-            --build-arg NOMAD_VERSION=${NOMAD_VERSION} \
-            --build-arg GO_VERSION=${GO_VERSION} \
-            --build-arg ALPINE_VERSION=${ALPINE_VERSION} \
-            --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
-            --build-arg VCS_REF=${GITHUB_SHA::8} \
-            ${TAGS} --file ./Dockerfile ./
-      - name: Docker Build
-        run: docker build ${{ steps.setup.outputs.build_string }}
-      - name: Docker Push - registry
-        if: success() && github.event_name != 'pull_request'
-        run: docker push -a ${REGISTRY_URI}/${GITHUB_REPOSITORY}
-      - name: Docker Login and Push - nexus
-        if: success() && github.event_name != 'pull_request'
-        env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_NEXUS_USERNAME }}
-          DOCKER_PASSWORD: ${{ secrets.DOCKER_NEXUS_TOKEN }}
-        run: |
-          echo "${DOCKER_PASSWORD}" | docker login ${NEXUS_URI} --username "${DOCKER_USERNAME}" --password-stdin
-          docker push -a ${NEXUS_URI}/${GITHUB_REPOSITORY}
+          images: |
+            ${{ env.REGISTRY_URI }}/${{ github.repository }}
+            ${{ env.NEXUS_URI }}/${{ github.repository }}
+          flavor: |
+            latest=${{ env.LATEST }}
+          tags: |
+            type=schedule
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+      - name: Set up QEMU
+        id: qemu
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: ${{ env.BUILD_ARCH }}
+      - uses: docker/setup-buildx-action@v2
+        id: buildx
+      - name: Login to Nexus
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.NEXUS_URI }}
+          username: ${{ secrets.DOCKER_NEXUS_USERNAME }}
+          password: ${{ secrets.DOCKER_NEXUS_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          platforms: ${{ env.BUILD_ARCH }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.REGISTRY_URI }}/${{ github.repository }}:latest
+          cache-to: type=inline

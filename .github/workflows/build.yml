@@ -13,53 +13,46 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: |
+            ${{ github.repository }}
+            ghcr.io/${{ github.repository }}
+          tags: |
+            type=schedule
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
       - name: Set up QEMU
         id: qemu
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v2
         with:
-          image: tonistiigi/binfmt:latest
           platforms: ${{ env.BUILD_ARCH }}
-      - uses: docker/setup-buildx-action@v1
+      - uses: docker/setup-buildx-action@v2
         id: buildx
+      - name: Login to DockerHub
+        uses: docker/login-action@v2
         with:
-          install: true
-      - name: Prepare
-        id: setup
-        run: |
-          VERSION=edge
-
-          if [[ $GITHUB_REF == refs/tags/* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/}
-          fi
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            VERSION=nightly
-          fi
-          echo ::set-output name=version::${VERSION}
-
-          TAGS="--tag ${GITHUB_REPOSITORY}:${VERSION} --tag ghcr.io/${GITHUB_REPOSITORY}:${VERSION}"
-          if [[ $VERSION =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-            TAGS="$TAGS --tag ${GITHUB_REPOSITORY}:latest --tag ghcr.io/${GITHUB_REPOSITORY}:latest"
-          fi
-          echo ::set-output name=build_string::--platform ${BUILD_ARCH} \
-            --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
-            --build-arg VCS_REF=${GITHUB_SHA::8} \
-            ${TAGS} --file ./Dockerfile ./
-      - name: Docker Build
-        run: |
-          docker build ${{ steps.setup.outputs.build_string }}
-      - name: Docker Login and Push - Docker Prime
-        if: success() && github.event_name != 'pull_request'
-        env:
-          DOCKER_USERNAME: ${{ github.actor }}
+          DOCKER_USERNAME: ${{ github.repository_owner }}
           DOCKER_PASSWORD: ${{ secrets.DOCKER_TOKEN_TRILOM }}
-        run: |
-          echo "${DOCKER_PASSWORD}" | docker login --username "${DOCKER_USERNAME}" --password-stdin
-          docker push -a ${GITHUB_REPOSITORY}
-      - name: Docker Login and Push - GHCR
-        if: success() && github.event_name != 'pull_request'
-        env:
-          DOCKER_USERNAME: ${{ github.actor }}
-          DOCKER_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "${DOCKER_PASSWORD}" | docker login ghcr.io --username "${DOCKER_USERNAME}" --password-stdin
-          docker push -a ghcr.io/${GITHUB_REPOSITORY}
+      - name: Login to GCHR
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          platforms: ${{ env.BUILD_ARCH }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ github.repository }}:latest
+          cache-to: type=inline
