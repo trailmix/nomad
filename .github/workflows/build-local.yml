@@ -34,6 +34,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+      - name: Set up QEMU
+        id: qemu
+        uses: docker/setup-qemu-action@v1
+        with:
+          image: tonistiigi/binfmt:latest
+          platforms: ${{ env.BUILD_ARCH }}
+      - uses: docker/setup-buildx-action@v1
+        id: buildx
+        with:
+          install: true
       - name: Set version
         id: setup
         run: |
