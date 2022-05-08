@@ -43,7 +43,7 @@ jobs:
             ${{ env.REGISTRY_URI }}/${{ github.repository }}
             ${{ env.NEXUS_URI }}/${{ github.repository }}
           flavor: |
-            latest=${{ env.LATEST }}
+            latest=${{ env.LATEST == true }}
           tags: |
             type=schedule
             type=ref,event=branch
