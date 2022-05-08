@@ -46,7 +46,8 @@ jobs:
         with:
           install: true
       - name: Docker Build
-        run: docker build ${{ steps.setup.outputs.build_string }}
+        run: |
+          docker build ${{ steps.setup.outputs.build_string }}
       - name: Docker Login and Push - Docker Prime
         if: success() && github.event_name != 'pull_request'
         env:
