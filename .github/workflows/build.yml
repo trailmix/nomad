@@ -16,6 +16,7 @@ jobs:
       - name: Prepare
         id: prepare
         run: |
+          set -x
           VERSION=edge
 
           if [[ $GITHUB_REF == refs/tags/* ]]; then
