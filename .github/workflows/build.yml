@@ -24,9 +24,8 @@ jobs:
         with:
           install: true
       - name: Prepare
-        id: prepare
+        id: setup
         run: |
-          set -x
           VERSION=edge
 
           if [[ $GITHUB_REF == refs/tags/* ]]; then
