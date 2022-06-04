@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1.4
 
-ARG NOMAD_VERSION=1.3.0-rc.1
+ARG NOMAD_VERSION=1.3.1
 ARG ALPINE_VERSION=3.15
-ARG GO_VERSION=1.17.9
+ARG GO_VERSION=1.18.2
 ARG ROOTLESSKIT_VERSION=0.14.6
 
 # helpers for buildkit, see xx- things
